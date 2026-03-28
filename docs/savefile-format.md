@@ -4,9 +4,11 @@
 
 The savefile is made of statements.
 
-Each statement has this shape:
+Most statements have this shape:
 
 `identifier = value`
+
+Some rare statements can also be a bare identifier with no `= value`.
 
 ## Values
 
@@ -44,7 +46,14 @@ Example:
 
 ### Block
 
-A block is surrounded by braces and contains statements.
+A block is surrounded by braces.
+
+Blocks can contain either:
+
+- statements
+- bare values
+
+Some blocks are list-like and contain only values, such as numeric histories.
 
 Example:
 
@@ -57,17 +66,20 @@ country = {
 
 ## Recursive structure
 
-Blocks contain statements, and each statement is again:
+Statement blocks contain statements, and each statement is again:
 
 `identifier = identifier / string / numeric literal / block`
 
-This means the format is recursive and can be parsed as a tree of statements.
+Value-list blocks contain bare values directly inside the block.
+
+This means the format is recursive and can be parsed as a tree.
 
 ## Additional parsing assumptions
 
 - Savefiles are large, so parser design should assume streaming or otherwise efficient parsing
 - The parser can be lossy
 - We should preserve statement order
-- We assume keys do not repeat inside the same block
-- If a key repeats inside the same block, the parser should panic for now
+- Keys can repeat inside the same block
+- The parser should preserve repeated keys in order
+- Saves may end with one or more trailing `}` tokens after the real root content
 - There are no comments

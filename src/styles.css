@@ -67,10 +67,16 @@ h1 {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+  transition: filter 120ms ease, opacity 120ms ease;
 }
 
 .primary-button:hover {
   filter: brightness(1.05);
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.75;
 }
 
 .status-card {
@@ -96,9 +102,14 @@ h1 {
   color: #ff8e8e;
 }
 
+.success-text {
+  margin: 12px 0 0;
+  color: #9ac88f;
+  word-break: break-word;
+}
+
 @media (max-width: 640px) {
   .panel {
     padding: 24px;
   }
 }
-
