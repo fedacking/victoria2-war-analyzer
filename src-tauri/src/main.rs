@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![deny(dead_code)]
 
 mod parser;
+mod war;
 
 use std::fs;
 
@@ -20,39 +22,18 @@ fn parse_savefile(path: String) -> Result<ParseSummary, String> {
     let contents = decode_windows_1252(&bytes);
     let document = parser::parse_document(&contents)
         .map_err(|error| format!("Failed to parse savefile '{path}': {error}"))?;
+    let wars = war::extract_wars(&document);
 
-    print_war_keys(&document, "previous_war");
-    print_war_keys(&document, "active_war");
+    for war in &wars.active_wars {
+        if let Some(history) = &war.history {
+            println!("{:#?}", history.battles);
+        }
+    }
 
     Ok(ParseSummary {
         path,
         top_level_statement_count: document.statements.len(),
     })
-}
-
-fn print_war_keys(document: &parser::Document, war_key: &str) {
-    for (index, keys) in collect_raw_war_keys(document, war_key).iter().enumerate() {
-        println!("{war_key}[{}]", index);
-
-        for key in keys {
-            println!("{key}");
-        }
-    }
-}
-
-fn collect_raw_war_keys(document: &parser::Document, war_key: &str) -> Vec<Vec<String>> {
-    document
-        .statements
-        .iter()
-        .filter(|statement| statement.key == war_key)
-        .map(|statement| match &statement.value {
-            Some(parser::Value::Block(parser::Block::Statements(war_statements))) => war_statements
-                .iter()
-                .map(|war_statement| war_statement.key.clone())
-                .collect(),
-            _ => Vec::new(),
-        })
-        .collect()
 }
 
 fn decode_windows_1252(bytes: &[u8]) -> String {
@@ -93,63 +74,13 @@ fn decode_windows_1252(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_raw_war_keys, decode_windows_1252};
-    use crate::parser::parse_document;
+    use super::decode_windows_1252;
 
     #[test]
     fn decodes_windows_1252_bytes() {
         let decoded = decode_windows_1252(&[0x43, 0x61, 0x66, 0xE9, 0x20, 0x97, 0x20, 0x80]);
 
         assert_eq!(decoded, "Caf\u{00E9} \u{2014} \u{20AC}");
-    }
-
-    #[test]
-    fn collects_raw_war_keys_in_order() {
-        let document = parse_document(
-            r#"
-            previous_war = {
-              name = "Brothers War"
-              attackers = { ENG }
-              defenders = { FRA }
-            }
-            previous_war = {
-              name = "Second War"
-              name = "Still Second War"
-              war_goal = acquire_state
-              defenders = { USA }
-            }
-            active_war = {
-              name = "Current War"
-              war_score = 12
-            }
-            "#,
-        )
-        .unwrap();
-
-        let previous_wars = collect_raw_war_keys(&document, "previous_war");
-        let active_wars = collect_raw_war_keys(&document, "active_war");
-
-        assert_eq!(
-            previous_wars,
-            vec![
-                vec![
-                    "name".to_string(),
-                    "attackers".to_string(),
-                    "defenders".to_string(),
-                ],
-                vec![
-                    "name".to_string(),
-                    "name".to_string(),
-                    "war_goal".to_string(),
-                    "defenders".to_string(),
-                ],
-            ]
-        );
-
-        assert_eq!(
-            active_wars,
-            vec![vec!["name".to_string(), "war_score".to_string()]]
-        );
     }
 }
 
