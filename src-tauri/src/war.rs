@@ -17,12 +17,12 @@ pub struct WarCollection {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WarData {
     pub kind: WarKind,
-    pub name: Option<String>,
-    pub history: Option<WarHistory>,
+    pub name: String,
+    pub history: WarHistory,
     pub attackers: Vec<String>,
     pub defenders: Vec<String>,
-    pub original_attackers: Vec<String>,
-    pub original_defenders: Vec<String>,
+    pub original_attacker: String,
+    pub original_defender: String,
     pub original_wargoals: Vec<Value>,
     pub actions: Vec<Value>,
     pub war_goals: Vec<Value>,
@@ -90,71 +90,90 @@ fn parse_war(statement: &Statement, kind: WarKind) -> Option<WarData> {
         return None;
     };
 
-    let mut war = WarData {
-        kind,
-        name: None,
-        history: None,
-        attackers: Vec::new(),
-        defenders: Vec::new(),
-        original_attackers: Vec::new(),
-        original_defenders: Vec::new(),
-        original_wargoals: Vec::new(),
-        actions: Vec::new(),
-        war_goals: Vec::new(),
-        great_wars_enabled: None,
-    };
+    let mut name = None;
+    let mut history = None;
+    let mut attackers = Vec::new();
+    let mut defenders = Vec::new();
+    let mut original_attacker = None;
+    let mut original_defender = None;
+    let mut original_wargoals = Vec::new();
+    let mut actions = Vec::new();
+    let mut war_goals = Vec::new();
+    let mut great_wars_enabled = None;
 
     for field in fields {
         match field.key.as_str() {
             "name" => {
-                war.name = field.value.as_ref().and_then(value_to_string);
+                name = field.value.as_ref().and_then(value_to_string);
             }
             "history" => {
-                war.history = field.value.as_ref().and_then(parse_war_history);
+                history = field.value.as_ref().and_then(parse_war_history);
             }
             "attacker" => {
                 if let Some(value) = field.value.as_ref().and_then(value_to_string) {
-                    war.attackers.push(value);
+                    attackers.push(value);
                 }
             }
             "defender" => {
                 if let Some(value) = field.value.as_ref().and_then(value_to_string) {
-                    war.defenders.push(value);
+                    defenders.push(value);
                 }
             }
             "original_attacker" => {
                 if let Some(value) = field.value.as_ref().and_then(value_to_string) {
-                    war.original_attackers.push(value);
+                    assert!(
+                        original_attacker.is_none(),
+                        "duplicate original_attacker in war '{}'",
+                        name.as_deref().unwrap_or("<unknown>")
+                    );
+                    original_attacker = Some(value);
                 }
             }
             "original_defender" => {
                 if let Some(value) = field.value.as_ref().and_then(value_to_string) {
-                    war.original_defenders.push(value);
+                    assert!(
+                        original_defender.is_none(),
+                        "duplicate original_defender in war '{}'",
+                        name.as_deref().unwrap_or("<unknown>")
+                    );
+                    original_defender = Some(value);
                 }
             }
             "original_wargoal" => {
                 if let Some(value) = field.value.clone() {
-                    war.original_wargoals.push(value);
+                    original_wargoals.push(value);
                 }
             }
             "action" => {
                 if let Some(value) = field.value.clone() {
-                    war.actions.push(value);
+                    actions.push(value);
                 }
             }
             "war_goal" => {
                 if let Some(value) = field.value.clone() {
-                    war.war_goals.push(value);
+                    war_goals.push(value);
                 }
             }
             "great_wars_enabled" => {
-                war.great_wars_enabled = field.value.as_ref().and_then(value_to_bool);
+                great_wars_enabled = field.value.as_ref().and_then(value_to_bool);
             }
             _ => {}
         }
     }
 
-    Some(war)
+    Some(WarData {
+        kind,
+        name: name?,
+        history: history?,
+        attackers,
+        defenders,
+        original_attacker: original_attacker?,
+        original_defender: original_defender?,
+        original_wargoals,
+        actions,
+        war_goals,
+        great_wars_enabled,
+    })
 }
 
 fn parse_war_history(value: &Value) -> Option<WarHistory> {
@@ -400,16 +419,13 @@ mod tests {
 
         let previous_war = &wars.previous_wars[0];
         assert_eq!(previous_war.kind, WarKind::Previous);
-        assert_eq!(previous_war.name.as_deref(), Some("The Brothers War"));
-        assert_eq!(previous_war.original_attackers, vec!["ENG".to_string()]);
-        assert_eq!(previous_war.original_defenders, vec!["FRA".to_string()]);
+        assert_eq!(previous_war.name, "The Brothers War");
+        assert_eq!(previous_war.original_attacker, "ENG");
+        assert_eq!(previous_war.original_defender, "FRA");
         assert_eq!(previous_war.actions.len(), 1);
         assert_eq!(previous_war.original_wargoals.len(), 1);
         assert!(previous_war.war_goals.is_empty());
-        let history = previous_war
-            .history
-            .as_ref()
-            .expect("expected previous war history");
+        let history = &previous_war.history;
         assert_eq!(history.battles.len(), 1);
         assert_eq!(history.battles[0].name, "Kavala");
         assert_eq!(history.battles[0].location, 823);
@@ -440,7 +456,7 @@ mod tests {
 
         let active_war = &wars.active_wars[0];
         assert_eq!(active_war.kind, WarKind::Active);
-        assert_eq!(active_war.name.as_deref(), Some("Great War"));
+        assert_eq!(active_war.name, "Great War");
         assert_eq!(
             active_war.attackers,
             vec!["ENG".to_string(), "USA".to_string()]
@@ -449,32 +465,52 @@ mod tests {
             active_war.defenders,
             vec!["FRA".to_string(), "NGF".to_string()]
         );
-        assert_eq!(active_war.original_attackers, vec!["ENG".to_string()]);
-        assert_eq!(active_war.original_defenders, vec!["FRA".to_string()]);
+        assert_eq!(active_war.original_attacker, "ENG");
+        assert_eq!(active_war.original_defender, "FRA");
         assert_eq!(active_war.great_wars_enabled, Some(true));
         assert_eq!(active_war.actions.len(), 1);
         assert_eq!(active_war.original_wargoals.len(), 1);
         assert_eq!(active_war.war_goals.len(), 1);
         assert_eq!(
-            active_war
-                .history
-                .as_ref()
-                .expect("expected active war history")
-                .battles[0]
+            active_war.history.battles[0]
                 .attacker
                 .unit_counts
                 .get("infantry"),
             Some(&8000)
         );
-        assert_eq!(
-            active_war
-                .history
-                .as_ref()
-                .expect("expected active war history")
-                .dated_entries[0]
-                .date
-                .year,
-            1914
-        );
+        assert_eq!(active_war.history.dated_entries[0].date.year, 1914);
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate original_attacker")]
+    fn panics_when_original_attacker_repeats() {
+        let document = parse_document(
+            r#"
+            previous_war = {
+              name = "Repeated Attacker"
+              history = {
+                battle = {
+                  name = "Kavala"
+                  location = 823
+                  result = no
+                  attacker = {
+                    country = "ITA"
+                    losses = 1
+                  }
+                  defender = {
+                    country = "TUR"
+                    losses = 2
+                  }
+                }
+              }
+              original_attacker = ENG
+              original_attacker = USA
+              original_defender = FRA
+            }
+            "#,
+        )
+        .unwrap();
+
+        let _ = extract_wars(&document);
     }
 }
