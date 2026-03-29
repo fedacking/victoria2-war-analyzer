@@ -48,7 +48,7 @@ pub struct Battle {
 pub struct BattleSide {
     pub country: Option<String>,
     pub leader: Option<String>,
-    pub losses: Option<i64>,
+    pub losses: Option<FixedPoint32>,
     pub unit_counts: BTreeMap<String, i64>,
 }
 
@@ -63,6 +63,65 @@ pub struct SaveDate {
     pub year: u16,
     pub month: u8,
     pub day: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FixedPoint32 {
+    raw: i32,
+}
+
+impl WarData {
+    pub fn total_losses(&self) -> f64 {
+        self.history.battles.iter().map(Battle::total_losses).sum()
+    }
+}
+
+impl Battle {
+    pub fn total_losses(&self) -> f64 {
+        self.attacker.losses_amount().unwrap_or(0.0) + self.defender.losses_amount().unwrap_or(0.0)
+    }
+}
+
+impl BattleSide {
+    pub fn losses_amount(&self) -> Option<f64> {
+        self.losses.map(FixedPoint32::to_f64)
+    }
+}
+
+impl FixedPoint32 {
+    const SCALE: i64 = 1_000;
+    const OVERFLOW_WRAP: i64 = 1_i64 << 32;
+
+    fn from_value(value: &Value) -> Option<Self> {
+        let scaled = match value {
+            Value::Integer(value) => value.checked_mul(Self::SCALE)?,
+            Value::Decimal(value) => (value * Self::SCALE as f64).round() as i64,
+            _ => return None,
+        };
+
+        Some(Self {
+            raw: i32::try_from(scaled).ok()?,
+        })
+    }
+
+    fn corrected_raw(self) -> u64 {
+        let raw = i64::from(self.raw);
+        let corrected = if raw < 0 {
+            raw + Self::OVERFLOW_WRAP
+        } else {
+            raw
+        };
+
+        corrected as u64
+    }
+
+    fn to_f64(self) -> f64 {
+        Self::raw_to_f64(self.corrected_raw())
+    }
+
+    fn raw_to_f64(raw: u64) -> f64 {
+        raw as f64 / Self::SCALE as f64
+    }
 }
 
 pub fn extract_wars(document: &Document) -> WarCollection {
@@ -271,7 +330,7 @@ fn parse_battle_side(value: &Value) -> Option<BattleSide> {
                 side.leader = field.value.as_ref().and_then(value_to_string);
             }
             "losses" => {
-                side.losses = field.value.as_ref().and_then(value_to_i64);
+                side.losses = field.value.as_ref().and_then(FixedPoint32::from_value);
             }
             unit_key => {
                 if let Some(count) = field.value.as_ref().and_then(value_to_i64) {
@@ -435,13 +494,15 @@ mod tests {
             history.battles[0].attacker.leader.as_deref(),
             Some("Pirzio Colonna")
         );
-        assert_eq!(history.battles[0].attacker.losses, Some(83643));
+        assert_eq!(history.battles[0].attacker.losses_amount(), Some(83643.0));
         assert_eq!(
             history.battles[0].attacker.unit_counts.get("artillery"),
             Some(&63000)
         );
         assert_eq!(history.battles[0].defender.country.as_deref(), Some("TUR"));
-        assert_eq!(history.battles[0].defender.losses, Some(19697));
+        assert_eq!(history.battles[0].defender.losses_amount(), Some(19697.0));
+        assert_eq!(history.battles[0].total_losses(), 103340.0);
+        assert_eq!(previous_war.total_losses(), 103340.0);
         assert_eq!(history.dated_entries.len(), 1);
         assert_eq!(history.dated_entries[0].date.year, 1836);
         assert_eq!(history.dated_entries[0].date.month, 12);
@@ -512,5 +573,43 @@ mod tests {
         .unwrap();
 
         let _ = extract_wars(&document);
+    }
+
+    #[test]
+    fn corrects_overflowed_battle_losses() {
+        let document = parse_document(
+            r#"
+            active_war = {
+              name = "Overflow War"
+              history = {
+                battle = {
+                  name = "Big Battle"
+                  location = 1
+                  result = yes
+                  attacker = {
+                    country = ENG
+                    losses = -1294967.296
+                  }
+                  defender = {
+                    country = FRA
+                    losses = 0
+                  }
+                }
+              }
+              attacker = ENG
+              defender = FRA
+              original_attacker = ENG
+              original_defender = FRA
+            }
+            "#,
+        )
+        .unwrap();
+
+        let wars = extract_wars(&document);
+        let battle = &wars.active_wars[0].history.battles[0];
+
+        assert_eq!(battle.attacker.losses_amount(), Some(3000000.0));
+        assert_eq!(battle.total_losses(), 3000000.0);
+        assert_eq!(wars.active_wars[0].total_losses(), 3000000.0);
     }
 }

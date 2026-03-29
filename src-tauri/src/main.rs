@@ -25,7 +25,7 @@ fn parse_savefile(path: String) -> Result<ParseSummary, String> {
     let wars = war::extract_wars(&document);
 
     for war in &wars.active_wars {
-        println!("{:#?}", war.history.battles);
+        println!("{} total losses: {:.3}", war.name, war.total_losses());
     }
 
     Ok(ParseSummary {
