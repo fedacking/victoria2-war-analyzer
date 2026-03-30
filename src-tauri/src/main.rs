@@ -2,21 +2,13 @@
 #![deny(dead_code)]
 
 mod parser;
+mod view;
 mod war;
 
 use std::fs;
 
-use serde::Serialize;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ParseSummary {
-    path: String,
-    top_level_statement_count: usize,
-}
-
 #[tauri::command]
-fn parse_savefile(path: String) -> Result<ParseSummary, String> {
+fn parse_savefile(path: String) -> Result<view::ParsedSavefileView, String> {
     let bytes =
         fs::read(&path).map_err(|error| format!("Failed to read savefile '{path}': {error}"))?;
     let contents = decode_windows_1252(&bytes);
@@ -24,14 +16,11 @@ fn parse_savefile(path: String) -> Result<ParseSummary, String> {
         .map_err(|error| format!("Failed to parse savefile '{path}': {error}"))?;
     let wars = war::extract_wars(&document);
 
-    for war in &wars.active_wars {
-        println!("{} total losses: {:.3}", war.name, war.total_losses());
-    }
-
-    Ok(ParseSummary {
+    Ok(view::build_parsed_savefile_view(
         path,
-        top_level_statement_count: document.statements.len(),
-    })
+        document.statements.len(),
+        &wars,
+    ))
 }
 
 fn decode_windows_1252(bytes: &[u8]) -> String {
