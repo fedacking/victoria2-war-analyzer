@@ -328,10 +328,19 @@ h1 {
   line-height: 1.5;
 }
 
+.list-card__summary--compact {
+  gap: 0;
+}
+
 .metric-row {
   color: #f1ddbd;
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   font-size: 0.88rem;
+}
+
+.metric-row--detail {
+  color: var(--panel-muted);
+  font-size: 0.8rem;
 }
 
 .battle-summary {

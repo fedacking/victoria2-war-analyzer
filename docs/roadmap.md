@@ -16,7 +16,6 @@ Build a Rust-first application that lets players inspect current and previous wa
 
 - Remove transfer wars from the main results when their total losses are zero or lower
 - Build previous-war participant lists by scanning every battle so countries missing from the original war declaration still appear
-- Show every attacker and defender in previous wars ordered by the date they joined
 - Show war dates when they can be derived from the save history
 - Show total losses per side, not only a single total for the whole war
 

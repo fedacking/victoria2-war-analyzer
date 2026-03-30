@@ -250,6 +250,10 @@ function App() {
                         {wars.map((war, warIndex) => {
                           const isSelected =
                             isSelectedSection && selectedWarIndex === warIndex;
+                          const warDateRange = formatWarDateRange(
+                            war.startDate,
+                            war.endDate,
+                          );
 
                           return (
                             <button
@@ -270,9 +274,22 @@ function App() {
                                 <span>Attackers: {formatSideList(war.attackers)}</span>
                                 <span>Defenders: {formatSideList(war.defenders)}</span>
                               </p>
+                              {warDateRange ? (
+                                <p className="list-card__summary list-card__summary--compact">
+                                  <span>{warDateRange}</span>
+                                </p>
+                              ) : null}
                               <div className="metric-row">
                                 <span>{formatBattleCount(war.battleCount)}</span>
-                                <span>{formatLosses(war.totalLosses)} losses</span>
+                                <span>{formatLosses(war.totalLosses)} total losses</span>
+                              </div>
+                              <div className="metric-row metric-row--detail">
+                                <span>
+                                  Attackers lost {formatLosses(war.attackerTotalLosses)}
+                                </span>
+                                <span>
+                                  Defenders lost {formatLosses(war.defenderTotalLosses)}
+                                </span>
                               </div>
                             </button>
                           );
@@ -541,6 +558,23 @@ function formatBattleCount(value: number): string {
 
 function formatSideList(values: string[]): string {
   return values.length ? values.join(", ") : "Unknown";
+}
+
+function formatWarDateRange(
+  startDate: string | null,
+  endDate: string | null,
+): string | null {
+  if (!startDate && !endDate) {
+    return null;
+  }
+
+  if (startDate && endDate) {
+    return startDate === endDate
+      ? `War date: ${startDate}`
+      : `War dates: ${startDate} to ${endDate}`;
+  }
+
+  return `War date: ${startDate ?? endDate}`;
 }
 
 function formatUnitKind(value: string): string {

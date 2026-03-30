@@ -58,7 +58,7 @@ pub struct DatedWarHistoryEntry {
     pub value: Value,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SaveDate {
     pub year: u16,
     pub month: u8,
@@ -71,14 +71,38 @@ pub struct FixedPoint32 {
 }
 
 impl WarData {
+    pub fn attacker_total_losses(&self) -> f64 {
+        self.history
+            .battles
+            .iter()
+            .map(Battle::attacker_losses)
+            .sum()
+    }
+
+    pub fn defender_total_losses(&self) -> f64 {
+        self.history
+            .battles
+            .iter()
+            .map(Battle::defender_losses)
+            .sum()
+    }
+
     pub fn total_losses(&self) -> f64 {
-        self.history.battles.iter().map(Battle::total_losses).sum()
+        self.attacker_total_losses() + self.defender_total_losses()
     }
 }
 
 impl Battle {
+    pub fn attacker_losses(&self) -> f64 {
+        self.attacker.losses_amount().unwrap_or(0.0)
+    }
+
+    pub fn defender_losses(&self) -> f64 {
+        self.defender.losses_amount().unwrap_or(0.0)
+    }
+
     pub fn total_losses(&self) -> f64 {
-        self.attacker.losses_amount().unwrap_or(0.0) + self.defender.losses_amount().unwrap_or(0.0)
+        self.attacker_losses() + self.defender_losses()
     }
 }
 
@@ -121,6 +145,12 @@ impl FixedPoint32 {
 
     fn raw_to_f64(raw: u64) -> f64 {
         raw as f64 / Self::SCALE as f64
+    }
+}
+
+impl SaveDate {
+    pub fn to_iso_string(self) -> String {
+        format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
     }
 }
 
@@ -247,7 +277,7 @@ fn parse_war_history(value: &Value) -> Option<WarHistory> {
 
     for field in history_fields {
         if field.key == "battle" {
-            if let Some(value) = field.value.as_ref().and_then(parse_battle) {
+            if let Some(value) = field.value.as_ref().and_then(parse_battle_from_value) {
                 history.battles.push(value);
             }
 
@@ -268,7 +298,7 @@ fn parse_war_history(value: &Value) -> Option<WarHistory> {
     Some(history)
 }
 
-fn parse_battle(value: &Value) -> Option<Battle> {
+pub(crate) fn parse_battle_from_value(value: &Value) -> Option<Battle> {
     let Value::Block(Block::Statements(fields)) = value else {
         return None;
     };
@@ -501,7 +531,11 @@ mod tests {
         );
         assert_eq!(history.battles[0].defender.country.as_deref(), Some("TUR"));
         assert_eq!(history.battles[0].defender.losses_amount(), Some(19697.0));
+        assert_eq!(history.battles[0].attacker_losses(), 83643.0);
+        assert_eq!(history.battles[0].defender_losses(), 19697.0);
         assert_eq!(history.battles[0].total_losses(), 103340.0);
+        assert_eq!(previous_war.attacker_total_losses(), 83643.0);
+        assert_eq!(previous_war.defender_total_losses(), 19697.0);
         assert_eq!(previous_war.total_losses(), 103340.0);
         assert_eq!(history.dated_entries.len(), 1);
         assert_eq!(history.dated_entries[0].date.year, 1836);
@@ -609,7 +643,11 @@ mod tests {
         let battle = &wars.active_wars[0].history.battles[0];
 
         assert_eq!(battle.attacker.losses_amount(), Some(3000000.0));
+        assert_eq!(battle.attacker_losses(), 3000000.0);
+        assert_eq!(battle.defender_losses(), 0.0);
         assert_eq!(battle.total_losses(), 3000000.0);
+        assert_eq!(wars.active_wars[0].attacker_total_losses(), 3000000.0);
+        assert_eq!(wars.active_wars[0].defender_total_losses(), 0.0);
         assert_eq!(wars.active_wars[0].total_losses(), 3000000.0);
     }
 }

@@ -14,6 +14,10 @@ export type WarView = {
   defenders: string[];
   battleCount: number;
   totalLosses: number;
+  attackerTotalLosses: number;
+  defenderTotalLosses: number;
+  startDate: string | null;
+  endDate: string | null;
   battles: BattleView[];
 };
 
