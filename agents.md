@@ -20,3 +20,8 @@ For every Rust code change:
 
 - Run `cargo fmt`
 - Run `cargo check`
+
+## Environment notes
+
+- In this Codex environment, `node` and `npm` commands require escalation.
+- Do not assume the sandbox can execute the user's `nvm`-managed Node installation directly.

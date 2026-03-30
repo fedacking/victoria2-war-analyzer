@@ -1,4 +1,7 @@
 node_modules/
 dist/
+artifacts/
+tools/icon-overlay/target/
+tools/icon-overlay/resources/
 src-tauri/target/
 src-tauri/gen/

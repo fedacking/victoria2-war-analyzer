@@ -25,7 +25,13 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": []
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "icon": [
+      "icons/icon.ico"
+    ]
   }
 }
-

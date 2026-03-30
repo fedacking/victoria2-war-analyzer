@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:installer": "tauri build --bundles nsis",
     "preview": "vite preview",
     "tauri": "tauri"
   },
