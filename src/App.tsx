@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
@@ -46,6 +46,7 @@ function App() {
     useState<WarSectionKey | null>(null);
   const [selectedWarIndex, setSelectedWarIndex] = useState<number>(0);
   const [selectedBattleIndex, setSelectedBattleIndex] = useState<number>(0);
+  const battleListScrollRef = useRef<HTMLDivElement | null>(null);
 
   function formatError(cause: unknown): string {
     if (cause instanceof Error) {
@@ -150,6 +151,12 @@ function App() {
     setSelectedBattleIndex(0);
   }
 
+  useEffect(() => {
+    if (battleListScrollRef.current) {
+      battleListScrollRef.current.scrollTop = 0;
+    }
+  }, [selectedWarSection, selectedWarIndex]);
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -218,7 +225,7 @@ function App() {
 
       {parsedSavefile ? (
         <section className="workspace">
-          <section className="panel">
+          <section className="panel panel--wars">
             <div className="panel-header">
               <div>
                 <p className="panel-kicker">Step 1</p>
@@ -227,85 +234,97 @@ function App() {
               <p className="panel-note">Choose a conflict to inspect.</p>
             </div>
 
-            <div className="panel-body">
-              {WAR_SECTION_ORDER.map((sectionKey) => {
-                const wars = parsedSavefile[sectionKey];
-                const isSelectedSection = selectedWarSection === sectionKey;
+            <div className="panel-body panel-body--list">
+              <div className="panel-scroll panel-scroll--wars">
+                {WAR_SECTION_ORDER.map((sectionKey) => {
+                  const wars = parsedSavefile[sectionKey];
+                  const isSelectedSection = selectedWarSection === sectionKey;
 
-                return (
-                  <section className="section-block" key={sectionKey}>
-                    <div className="section-heading">
-                      <div>
-                        <p className="section-kicker">
-                          {SECTION_COPY[sectionKey].tone}
-                        </p>
-                        <h3>{SECTION_COPY[sectionKey].title}</h3>
+                  return (
+                    <section className="section-block" key={sectionKey}>
+                      <div className="section-heading">
+                        <div>
+                          <p className="section-kicker">
+                            {SECTION_COPY[sectionKey].tone}
+                          </p>
+                          <h3>{SECTION_COPY[sectionKey].title}</h3>
+                        </div>
+                        <span className="count-pill">
+                          {integerFormatter.format(wars.length)}
+                        </span>
                       </div>
-                      <span className="count-pill">
-                        {integerFormatter.format(wars.length)}
-                      </span>
-                    </div>
 
-                    {wars.length ? (
-                      <div className="list-stack">
-                        {wars.map((war, warIndex) => {
-                          const isSelected =
-                            isSelectedSection && selectedWarIndex === warIndex;
-                          const warDateRange = formatWarDateRange(
-                            war.startDate,
-                            war.endDate,
-                          );
+                      {wars.length ? (
+                        <div className="list-stack">
+                          {wars.map((war, warIndex) => {
+                            const isSelected =
+                              isSelectedSection && selectedWarIndex === warIndex;
+                            const warDateRange = formatWarDateRange(
+                              war.startDate,
+                              war.endDate,
+                            );
 
-                          return (
-                            <button
-                              className={`list-card ${isSelected ? "is-selected" : ""}`}
-                              key={`${sectionKey}-${war.name}-${warIndex}`}
-                              onClick={() =>
-                                handleWarSelection(sectionKey, warIndex)
-                              }
-                              type="button"
-                            >
-                              <div className="list-card__header">
-                                <h4>{war.name}</h4>
-                                <span className="kind-badge">
-                                  {war.kind === "active" ? "Active" : "Previous"}
-                                </span>
-                              </div>
-                              <p className="list-card__summary">
-                                <span>Attackers: {formatSideList(war.attackers)}</span>
-                                <span>Defenders: {formatSideList(war.defenders)}</span>
-                              </p>
-                              {warDateRange ? (
-                                <p className="list-card__summary list-card__summary--compact">
-                                  <span>{warDateRange}</span>
+                            return (
+                              <button
+                                className={`list-card ${isSelected ? "is-selected" : ""}`}
+                                key={`${sectionKey}-${war.name}-${warIndex}`}
+                                onClick={() =>
+                                  handleWarSelection(sectionKey, warIndex)
+                                }
+                                type="button"
+                              >
+                                <div className="list-card__header">
+                                  <h4>{war.name}</h4>
+                                  <span className="kind-badge">
+                                    {war.kind === "active"
+                                      ? "Active"
+                                      : "Previous"}
+                                  </span>
+                                </div>
+                                <p className="list-card__summary">
+                                  <span>
+                                    Attackers: {formatSideList(war.attackers)}
+                                  </span>
+                                  <span>
+                                    Defenders: {formatSideList(war.defenders)}
+                                  </span>
                                 </p>
-                              ) : null}
-                              <div className="metric-row">
-                                <span>{formatBattleCount(war.battleCount)}</span>
-                                <span>{formatLosses(war.totalLosses)} total losses</span>
-                              </div>
-                              <div className="metric-row metric-row--detail">
-                                <span>
-                                  Attackers lost {formatLosses(war.attackerTotalLosses)}
-                                </span>
-                                <span>
-                                  Defenders lost {formatLosses(war.defenderTotalLosses)}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="empty-copy">{SECTION_COPY[sectionKey].empty}</p>
-                    )}
-                  </section>
-                );
-              })}
+                                {warDateRange ? (
+                                  <p className="list-card__summary list-card__summary--compact">
+                                    <span>{warDateRange}</span>
+                                  </p>
+                                ) : null}
+                                <div className="metric-row">
+                                  <span>{formatBattleCount(war.battleCount)}</span>
+                                  <span>
+                                    {formatLosses(war.totalLosses)} total losses
+                                  </span>
+                                </div>
+                                <div className="metric-row metric-row--detail">
+                                  <span>
+                                    Attackers lost{" "}
+                                    {formatLosses(war.attackerTotalLosses)}
+                                  </span>
+                                  <span>
+                                    Defenders lost{" "}
+                                    {formatLosses(war.defenderTotalLosses)}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="empty-copy">{SECTION_COPY[sectionKey].empty}</p>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel panel--battles">
             <div className="panel-header">
               <div>
                 <p className="panel-kicker">Step 2</p>
@@ -318,52 +337,57 @@ function App() {
               </p>
             </div>
 
-            <div className="panel-body">
-              {selectedWar ? (
-                selectedWar.battles.length ? (
-                  <div className="list-stack">
-                    {selectedWar.battles.map((battle, battleIndex) => (
-                      <button
-                        className={`list-card ${selectedBattleIndex === battleIndex ? "is-selected" : ""}`}
-                        key={`${battle.name}-${battle.locationId}-${battleIndex}`}
-                        onClick={() => setSelectedBattleIndex(battleIndex)}
-                        type="button"
-                      >
-                        <div className="list-card__header">
-                          <h4>{battle.name}</h4>
-                          <div className="pill-stack">
-                            <WinnerPill winner={battle.winner} />
-                            <span className="loss-pill">
-                              {formatLosses(battle.totalLosses)} losses
-                            </span>
+            <div className="panel-body panel-body--list">
+              <div
+                className="panel-scroll panel-scroll--battles"
+                ref={battleListScrollRef}
+              >
+                {selectedWar ? (
+                  selectedWar.battles.length ? (
+                    <div className="list-stack">
+                      {selectedWar.battles.map((battle, battleIndex) => (
+                        <button
+                          className={`list-card ${selectedBattleIndex === battleIndex ? "is-selected" : ""}`}
+                          key={`${battle.name}-${battle.locationId}-${battleIndex}`}
+                          onClick={() => setSelectedBattleIndex(battleIndex)}
+                          type="button"
+                        >
+                          <div className="list-card__header">
+                            <h4>{battle.name}</h4>
+                            <div className="pill-stack">
+                              <WinnerPill winner={battle.winner} />
+                              <span className="loss-pill">
+                                {formatLosses(battle.totalLosses)} losses
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                        <p className="list-card__summary">
-                          <span>{battle.locationLabel}</span>
-                          <span>
-                            {battle.attacker.country ?? "Unknown attacker"} vs{" "}
-                            {battle.defender.country ?? "Unknown defender"}
-                          </span>
-                        </p>
-                      </button>
-                    ))}
-                  </div>
+                          <p className="list-card__summary">
+                            <span>{battle.locationLabel}</span>
+                            <span>
+                              {battle.attacker.country ?? "Unknown attacker"} vs{" "}
+                              {battle.defender.country ?? "Unknown defender"}
+                            </span>
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyPanel
+                      title="No battles recorded"
+                      copy="The selected war parsed correctly, but its history block did not include any battle entries."
+                    />
+                  )
                 ) : (
                   <EmptyPanel
-                    title="No battles recorded"
-                    copy="The selected war parsed correctly, but its history block did not include any battle entries."
+                    title="No war selected"
+                    copy="Select a war from the left panel to inspect its battles."
                   />
-                )
-              ) : (
-                <EmptyPanel
-                  title="No war selected"
-                  copy="Select a war from the left panel to inspect its battles."
-                />
-              )}
+                )}
+              </div>
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel panel--detail">
             <div className="panel-header">
               <div>
                 <p className="panel-kicker">Step 3</p>
@@ -376,54 +400,58 @@ function App() {
               </p>
             </div>
 
-            <div className="panel-body">
-              {selectedWar && selectedBattle ? (
-                <div className="detail-stack">
-                  <section className="battle-summary">
-                    <div>
-                      <p className="section-kicker">{selectedWar.name}</p>
-                      <h3>{selectedBattle.name}</h3>
-                    </div>
-                    <div className="battle-summary__stats">
-                      <span>{selectedBattle.locationLabel}</span>
-                      <WinnerPill winner={selectedBattle.winner} />
-                      <strong>
-                        {formatLosses(selectedBattle.totalLosses)} total losses
-                      </strong>
-                    </div>
-                  </section>
-
-                  <div className="side-grid">
-                    <SideCard label="Attacker" side={selectedBattle.attacker} />
-                    <SideCard label="Defender" side={selectedBattle.defender} />
-                  </div>
-
-                  <section className="unit-breakdown">
-                    <div className="section-heading section-heading--detail">
+            <div className="panel-body panel-body--detail">
+              <div className="panel-scroll panel-scroll--detail">
+                {selectedWar && selectedBattle ? (
+                  <div className="detail-stack">
+                    <section className="battle-summary">
                       <div>
-                        <p className="section-kicker">Force comparison</p>
-                        <h3>Unit kinds in battle</h3>
+                        <p className="section-kicker">{selectedWar.name}</p>
+                        <h3>{selectedBattle.name}</h3>
                       </div>
-                      <span className="count-pill">
-                        {integerFormatter.format(selectedBattle.unitBreakdown.length)}
-                      </span>
+                      <div className="battle-summary__stats">
+                        <span>{selectedBattle.locationLabel}</span>
+                        <WinnerPill winner={selectedBattle.winner} />
+                        <strong>
+                          {formatLosses(selectedBattle.totalLosses)} total losses
+                        </strong>
+                      </div>
+                    </section>
+
+                    <div className="side-grid">
+                      <SideCard label="Attacker" side={selectedBattle.attacker} />
+                      <SideCard label="Defender" side={selectedBattle.defender} />
                     </div>
 
-                    {selectedBattle.unitBreakdown.length ? (
-                      <UnitBreakdownTable rows={selectedBattle.unitBreakdown} />
-                    ) : (
-                      <p className="empty-copy">
-                        No unit-kind counts were recorded for this battle.
-                      </p>
-                    )}
-                  </section>
-                </div>
-              ) : (
-                <EmptyPanel
-                  title="No battle selected"
-                  copy="Select a battle from the middle panel to see side losses and the unit-kind comparison."
-                />
-              )}
+                    <section className="unit-breakdown">
+                      <div className="section-heading section-heading--detail">
+                        <div>
+                          <p className="section-kicker">Force comparison</p>
+                          <h3>Unit kinds in battle</h3>
+                        </div>
+                        <span className="count-pill">
+                          {integerFormatter.format(
+                            selectedBattle.unitBreakdown.length,
+                          )}
+                        </span>
+                      </div>
+
+                      {selectedBattle.unitBreakdown.length ? (
+                        <UnitBreakdownTable rows={selectedBattle.unitBreakdown} />
+                      ) : (
+                        <p className="empty-copy">
+                          No unit-kind counts were recorded for this battle.
+                        </p>
+                      )}
+                    </section>
+                  </div>
+                ) : (
+                  <EmptyPanel
+                    title="No battle selected"
+                    copy="Select a battle from the middle panel to see side losses and the unit-kind comparison."
+                  />
+                )}
+              </div>
             </div>
           </section>
         </section>

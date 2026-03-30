@@ -12,13 +12,7 @@ Build a Rust-first application that lets players inspect current and previous wa
 
 ## Next Milestones
 
-### 1. Battle browsing and layout
-
-- Give the war list and battle list their own scroll containers so selecting a battle does not push the battle breakdown out of view
-- Keep the selected battle breakdown pinned and readable while browsing wars and battles
-
-
-### 2. Country and geography data
+### 1. Country and geography data
 
 - Resolve country names from mod files first and fall back to base game data using the three-letter country tag
 - Resolve country flags from mod files first and fall back to base game flag assets for the same tag
