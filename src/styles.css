@@ -249,7 +249,8 @@ h1 {
 
 .count-pill,
 .kind-badge,
-.loss-pill {
+.loss-pill,
+.winner-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -270,6 +271,21 @@ h1 {
 .loss-pill {
   color: #fbd4aa;
   background: rgba(201, 111, 89, 0.16);
+}
+
+.winner-pill--attacker {
+  color: #f7e2b8;
+  background: rgba(214, 168, 94, 0.18);
+}
+
+.winner-pill--defender {
+  color: #d3e2f7;
+  background: rgba(110, 139, 176, 0.2);
+}
+
+.winner-pill--unknown {
+  color: rgba(246, 239, 223, 0.82);
+  background: rgba(246, 239, 223, 0.08);
 }
 
 .list-stack {
@@ -318,6 +334,13 @@ h1 {
   justify-content: space-between;
 }
 
+.pill-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .list-card__header h4 {
   font-size: 1.02rem;
 }
@@ -354,6 +377,10 @@ h1 {
   gap: 6px;
   text-align: right;
   color: var(--panel-muted);
+}
+
+.battle-summary__stats .winner-pill {
+  justify-self: end;
 }
 
 .battle-summary__stats strong {
@@ -546,5 +573,11 @@ h1 {
   .battle-summary__stats {
     max-width: none;
     text-align: left;
+  }
+
+  .pill-stack,
+  .battle-summary__stats .winner-pill {
+    justify-content: flex-start;
+    justify-self: start;
   }
 }

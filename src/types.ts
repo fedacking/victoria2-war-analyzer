@@ -1,4 +1,5 @@
 export type WarKind = "active" | "previous";
+export type BattleWinner = "attacker" | "defender" | "unknown";
 
 export type ParsedSavefileView = {
   path: string;
@@ -26,6 +27,7 @@ export type BattleView = {
   locationId: number;
   locationLabel: string;
   totalLosses: number;
+  winner: BattleWinner;
   attacker: BattleSideView;
   defender: BattleSideView;
   unitBreakdown: UnitBreakdownRowView[];

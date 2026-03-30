@@ -39,7 +39,7 @@ pub struct WarHistory {
 pub struct Battle {
     pub name: String,
     pub location: i64,
-    pub result: String,
+    pub attacker_won: Option<bool>,
     pub attacker: BattleSide,
     pub defender: BattleSide,
 }
@@ -289,6 +289,7 @@ fn parse_war_history(value: &Value) -> Option<WarHistory> {
         };
 
         if let Some(value) = field.value.clone() {
+            collect_battles_from_history_value(&value, &mut history.battles);
             history
                 .dated_entries
                 .push(DatedWarHistoryEntry { date, value });
@@ -298,6 +299,32 @@ fn parse_war_history(value: &Value) -> Option<WarHistory> {
     Some(history)
 }
 
+fn collect_battles_from_history_value(value: &Value, battles: &mut Vec<Battle>) {
+    match value {
+        Value::Block(Block::Statements(fields)) => {
+            for field in fields {
+                if field.key == "battle" {
+                    if let Some(battle) = field.value.as_ref().and_then(parse_battle_from_value) {
+                        battles.push(battle);
+                    }
+
+                    continue;
+                }
+
+                if let Some(value) = field.value.as_ref() {
+                    collect_battles_from_history_value(value, battles);
+                }
+            }
+        }
+        Value::Block(Block::Values(values)) => {
+            for value in values {
+                collect_battles_from_history_value(value, battles);
+            }
+        }
+        _ => {}
+    }
+}
+
 pub(crate) fn parse_battle_from_value(value: &Value) -> Option<Battle> {
     let Value::Block(Block::Statements(fields)) = value else {
         return None;
@@ -305,7 +332,7 @@ pub(crate) fn parse_battle_from_value(value: &Value) -> Option<Battle> {
 
     let mut name = None;
     let mut location = None;
-    let mut result = None;
+    let mut attacker_won = None;
     let mut attacker = None;
     let mut defender = None;
 
@@ -318,7 +345,7 @@ pub(crate) fn parse_battle_from_value(value: &Value) -> Option<Battle> {
                 location = field.value.as_ref().and_then(value_to_i64);
             }
             "result" => {
-                result = field.value.as_ref().and_then(value_to_string);
+                attacker_won = field.value.as_ref().and_then(value_to_bool);
             }
             "attacker" => {
                 attacker = field.value.as_ref().and_then(parse_battle_side);
@@ -333,7 +360,7 @@ pub(crate) fn parse_battle_from_value(value: &Value) -> Option<Battle> {
     Some(Battle {
         name: name?,
         location: location?,
-        result: result?,
+        attacker_won,
         attacker: attacker?,
         defender: defender?,
     })
@@ -518,7 +545,7 @@ mod tests {
         assert_eq!(history.battles.len(), 1);
         assert_eq!(history.battles[0].name, "Kavala");
         assert_eq!(history.battles[0].location, 823);
-        assert_eq!(history.battles[0].result, "no");
+        assert_eq!(history.battles[0].attacker_won, Some(false));
         assert_eq!(history.battles[0].attacker.country.as_deref(), Some("ITA"));
         assert_eq!(
             history.battles[0].attacker.leader.as_deref(),
@@ -573,7 +600,56 @@ mod tests {
                 .get("infantry"),
             Some(&8000)
         );
+        assert_eq!(active_war.history.battles[0].attacker_won, Some(true));
         assert_eq!(active_war.history.dated_entries[0].date.year, 1914);
+    }
+
+    #[test]
+    fn extracts_active_war_battles_nested_under_dated_history_entries() {
+        let document = parse_document(
+            r#"
+            active_war = {
+              name = "Dated Battle War"
+              history = {
+                1901.2.3 = {
+                  theater = {
+                    battle = {
+                      name = "Kavala"
+                      location = 823
+                      result = 1
+                      attacker = {
+                        country = ENG
+                        losses = 600
+                      }
+                      defender = {
+                        country = FRA
+                        losses = 400
+                      }
+                    }
+                  }
+                }
+              }
+              attacker = ENG
+              defender = FRA
+              original_attacker = ENG
+              original_defender = FRA
+            }
+            "#,
+        )
+        .unwrap();
+
+        let wars = extract_wars(&document);
+        let war = &wars.active_wars[0];
+
+        assert_eq!(war.history.dated_entries.len(), 1);
+        assert_eq!(war.history.battles.len(), 1);
+        assert_eq!(war.history.battles[0].name, "Kavala");
+        assert_eq!(war.history.battles[0].location, 823);
+        assert_eq!(war.history.battles[0].attacker_won, Some(true));
+        assert_eq!(war.history.battles[0].total_losses(), 1000.0);
+        assert_eq!(war.attacker_total_losses(), 600.0);
+        assert_eq!(war.defender_total_losses(), 400.0);
+        assert_eq!(war.total_losses(), 1000.0);
     }
 
     #[test]

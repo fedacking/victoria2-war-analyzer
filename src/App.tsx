@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   BattleSideView,
+  BattleWinner,
   ParsedSavefileView,
   UnitBreakdownRowView,
   WarSectionKey,
@@ -330,9 +331,12 @@ function App() {
                       >
                         <div className="list-card__header">
                           <h4>{battle.name}</h4>
-                          <span className="loss-pill">
-                            {formatLosses(battle.totalLosses)} losses
-                          </span>
+                          <div className="pill-stack">
+                            <WinnerPill winner={battle.winner} />
+                            <span className="loss-pill">
+                              {formatLosses(battle.totalLosses)} losses
+                            </span>
+                          </div>
                         </div>
                         <p className="list-card__summary">
                           <span>{battle.locationLabel}</span>
@@ -382,6 +386,7 @@ function App() {
                     </div>
                     <div className="battle-summary__stats">
                       <span>{selectedBattle.locationLabel}</span>
+                      <WinnerPill winner={selectedBattle.winner} />
                       <strong>
                         {formatLosses(selectedBattle.totalLosses)} total losses
                       </strong>
@@ -464,6 +469,14 @@ function SideCard({
         </div>
       </dl>
     </section>
+  );
+}
+
+function WinnerPill({ winner }: { winner: BattleWinner }) {
+  return (
+    <span className={`winner-pill winner-pill--${winner}`}>
+      {formatBattleWinner(winner)}
+    </span>
   );
 }
 
@@ -575,6 +588,17 @@ function formatWarDateRange(
   }
 
   return `War date: ${startDate ?? endDate}`;
+}
+
+function formatBattleWinner(value: BattleWinner): string {
+  switch (value) {
+    case "attacker":
+      return "Attacker victory";
+    case "defender":
+      return "Defender victory";
+    case "unknown":
+      return "Winner unknown";
+  }
 }
 
 function formatUnitKind(value: string): string {

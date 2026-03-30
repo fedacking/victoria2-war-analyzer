@@ -12,19 +12,13 @@ Build a Rust-first application that lets players inspect current and previous wa
 
 ## Next Milestones
 
-### 1. Battle parsing and naming
-
-- Handle current battles that are stored under dated history entries instead of the `battle` key
-- Rename repeated battles within the same war so they are distinguishable in the UI, such as first and second battles of the same location
-- Show the battle winner by decoding the parsed result flag into the winning side
-
-### 2. Battle browsing and layout
+### 1. Battle browsing and layout
 
 - Give the war list and battle list their own scroll containers so selecting a battle does not push the battle breakdown out of view
 - Keep the selected battle breakdown pinned and readable while browsing wars and battles
 
 
-### 3. Country and geography data
+### 2. Country and geography data
 
 - Resolve country names from mod files first and fall back to base game data using the three-letter country tag
 - Resolve country flags from mod files first and fall back to base game flag assets for the same tag

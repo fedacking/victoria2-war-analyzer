@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::{
@@ -46,9 +48,18 @@ pub struct BattleView {
     pub location_id: i64,
     pub location_label: String,
     pub total_losses: f64,
+    pub winner: BattleWinnerView,
     pub attacker: BattleSideView,
     pub defender: BattleSideView,
     pub unit_breakdown: Vec<UnitBreakdownRowView>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum BattleWinnerView {
+    Attacker,
+    Defender,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -98,14 +109,7 @@ fn build_war_views(wars: &[WarData]) -> Vec<WarView> {
 
 impl From<&WarData> for WarView {
     fn from(war: &WarData) -> Self {
-        let mut battles: Vec<_> = war.history.battles.iter().map(BattleView::from).collect();
-        battles.sort_by(|left, right| {
-            right
-                .total_losses
-                .total_cmp(&left.total_losses)
-                .then_with(|| left.name.cmp(&right.name))
-                .then_with(|| left.location_id.cmp(&right.location_id))
-        });
+        let battles = build_battle_views(&war.history.battles);
         let (attackers, defenders) = participant_lists(war);
         let (start_date, end_date) = war_date_range(war);
 
@@ -134,16 +138,27 @@ impl From<&WarKind> for WarKindView {
     }
 }
 
-impl From<&Battle> for BattleView {
-    fn from(battle: &Battle) -> Self {
+impl BattleView {
+    fn from_battle(battle: &Battle, display_name: String) -> Self {
         Self {
-            name: battle.name.clone(),
+            name: display_name,
             location_id: battle.location,
             location_label: format!("Province #{}", battle.location),
             total_losses: battle.total_losses(),
+            winner: BattleWinnerView::from(battle.attacker_won),
             attacker: BattleSideView::from(&battle.attacker),
             defender: BattleSideView::from(&battle.defender),
             unit_breakdown: build_unit_breakdown(battle),
+        }
+    }
+}
+
+impl From<Option<bool>> for BattleWinnerView {
+    fn from(attacker_won: Option<bool>) -> Self {
+        match attacker_won {
+            Some(true) => Self::Attacker,
+            Some(false) => Self::Defender,
+            None => Self::Unknown,
         }
     }
 }
@@ -194,6 +209,77 @@ fn build_unit_breakdown(battle: &Battle) -> Vec<UnitBreakdownRowView> {
     });
 
     rows
+}
+
+fn build_battle_views(battles: &[Battle]) -> Vec<BattleView> {
+    let mut duplicate_counts = BTreeMap::<(String, i64), usize>::new();
+
+    for battle in battles {
+        *duplicate_counts
+            .entry((battle.name.clone(), battle.location))
+            .or_default() += 1;
+    }
+
+    let mut duplicate_indexes = BTreeMap::<(String, i64), usize>::new();
+    let mut views = Vec::with_capacity(battles.len());
+
+    for battle in battles {
+        let key = (battle.name.clone(), battle.location);
+        let duplicate_count = duplicate_counts.get(&key).copied().unwrap_or_default();
+        let display_name = if duplicate_count > 1 {
+            let next_index = duplicate_indexes.entry(key).or_default();
+            *next_index += 1;
+            format_duplicate_battle_name(&battle.name, *next_index)
+        } else {
+            battle.name.clone()
+        };
+
+        views.push(BattleView::from_battle(battle, display_name));
+    }
+
+    views.sort_by(|left, right| {
+        right
+            .total_losses
+            .total_cmp(&left.total_losses)
+            .then_with(|| left.name.cmp(&right.name))
+            .then_with(|| left.location_id.cmp(&right.location_id))
+    });
+
+    views
+}
+
+fn format_duplicate_battle_name(name: &str, occurrence: usize) -> String {
+    format!("{} Battle of {}", ordinal_label(occurrence), name)
+}
+
+fn ordinal_label(value: usize) -> String {
+    match value {
+        1 => "First".to_string(),
+        2 => "Second".to_string(),
+        3 => "Third".to_string(),
+        4 => "Fourth".to_string(),
+        5 => "Fifth".to_string(),
+        6 => "Sixth".to_string(),
+        7 => "Seventh".to_string(),
+        8 => "Eighth".to_string(),
+        9 => "Ninth".to_string(),
+        10 => "Tenth".to_string(),
+        _ => format!("{value}{}", ordinal_suffix(value)),
+    }
+}
+
+fn ordinal_suffix(value: usize) -> &'static str {
+    let last_two = value % 100;
+    if (11..=13).contains(&last_two) {
+        return "th";
+    }
+
+    match value % 10 {
+        1 => "st",
+        2 => "nd",
+        3 => "rd",
+        _ => "th",
+    }
 }
 
 fn participant_lists(war: &WarData) -> (Vec<String>, Vec<String>) {
@@ -379,7 +465,7 @@ impl ParticipantAccumulator {
 
 #[cfg(test)]
 mod tests {
-    use super::{WarKindView, build_parsed_savefile_view};
+    use super::{BattleWinnerView, WarKindView, build_parsed_savefile_view};
     use crate::{parser::parse_document, war::extract_wars};
 
     #[test]
@@ -506,6 +592,10 @@ mod tests {
             view.active_wars[0].battles[0].attacker.country.as_deref(),
             Some("PRU")
         );
+        assert_eq!(
+            view.active_wars[0].battles[0].winner,
+            BattleWinnerView::Attacker
+        );
         assert_eq!(view.active_wars[0].battles[0].unit_breakdown.len(), 3);
         assert_eq!(
             view.active_wars[0].battles[0].unit_breakdown[0].unit_kind,
@@ -538,6 +628,123 @@ mod tests {
         assert_eq!(view.active_wars[1].name, "Low Loss War");
         assert_eq!(view.previous_wars[0].kind, WarKindView::Previous);
         assert_eq!(view.previous_wars[0].total_losses, 1250.0);
+    }
+
+    #[test]
+    fn includes_active_wars_whose_only_battle_is_nested_under_dated_history_entries() {
+        let document = parse_document(
+            r#"
+            active_war = {
+              name = "Dated Battle War"
+              history = {
+                1901.2.3 = {
+                  theater = {
+                    battle = {
+                      name = "Frontier Clash"
+                      location = 77
+                      result = yes
+                      attacker = {
+                        country = ENG
+                        losses = 700
+                      }
+                      defender = {
+                        country = FRA
+                        losses = 500
+                      }
+                    }
+                  }
+                }
+              }
+              attacker = ENG
+              defender = FRA
+              original_attacker = ENG
+              original_defender = FRA
+            }
+            "#,
+        )
+        .unwrap();
+
+        let wars = extract_wars(&document);
+        let view = build_parsed_savefile_view("dated.v2".to_string(), 1, &wars);
+        let war = &view.active_wars[0];
+
+        assert_eq!(view.active_wars.len(), 1);
+        assert_eq!(war.name, "Dated Battle War");
+        assert_eq!(war.battle_count, 1);
+        assert_eq!(war.total_losses, 1200.0);
+        assert_eq!(war.start_date.as_deref(), Some("1901-02-03"));
+        assert_eq!(war.end_date.as_deref(), Some("1901-02-03"));
+        assert_eq!(war.battles[0].name, "Frontier Clash");
+        assert_eq!(war.battles[0].winner, BattleWinnerView::Attacker);
+    }
+
+    #[test]
+    fn renames_duplicate_battles_and_surfaces_winner_states() {
+        let document = parse_document(
+            r#"
+            active_war = {
+              name = "Repeated Battle War"
+              history = {
+                battle = {
+                  name = "Kavala"
+                  location = 823
+                  result = 1
+                  attacker = {
+                    country = ENG
+                    losses = 600
+                  }
+                  defender = {
+                    country = FRA
+                    losses = 450
+                  }
+                }
+                battle = {
+                  name = "Kavala"
+                  location = 823
+                  result = 0
+                  attacker = {
+                    country = ENG
+                    losses = 900
+                  }
+                  defender = {
+                    country = FRA
+                    losses = 800
+                  }
+                }
+                battle = {
+                  name = "Murviedro"
+                  location = 824
+                  result = draw
+                  attacker = {
+                    country = ENG
+                    losses = 100
+                  }
+                  defender = {
+                    country = FRA
+                    losses = 50
+                  }
+                }
+              }
+              attacker = ENG
+              defender = FRA
+              original_attacker = ENG
+              original_defender = FRA
+            }
+            "#,
+        )
+        .unwrap();
+
+        let wars = extract_wars(&document);
+        let view = build_parsed_savefile_view("repeats.v2".to_string(), 1, &wars);
+        let battles = &view.active_wars[0].battles;
+
+        assert_eq!(battles.len(), 3);
+        assert_eq!(battles[0].name, "Second Battle of Kavala");
+        assert_eq!(battles[0].winner, BattleWinnerView::Defender);
+        assert_eq!(battles[1].name, "First Battle of Kavala");
+        assert_eq!(battles[1].winner, BattleWinnerView::Attacker);
+        assert_eq!(battles[2].name, "Murviedro");
+        assert_eq!(battles[2].winner, BattleWinnerView::Unknown);
     }
 
     #[test]
@@ -590,10 +797,12 @@ mod tests {
         assert_eq!(war.start_date, None);
         assert_eq!(war.end_date, None);
         assert_eq!(war.battles[0].name, "Huge Clash");
+        assert_eq!(war.battles[0].winner, BattleWinnerView::Attacker);
         assert_eq!(war.battles[0].attacker.losses, Some(3000000.0));
         assert_eq!(war.battles[0].defender.losses, None);
         assert!(war.battles[0].unit_breakdown.is_empty());
         assert_eq!(war.battles[1].total_losses, 0.0);
+        assert_eq!(war.battles[1].winner, BattleWinnerView::Defender);
         assert_eq!(war.battles[1].attacker.losses, None);
         assert!(war.battles[1].unit_breakdown.is_empty());
     }
