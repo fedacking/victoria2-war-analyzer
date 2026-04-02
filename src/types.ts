@@ -4,8 +4,20 @@ export type BattleWinner = "attacker" | "defender" | "unknown";
 export type ParsedSavefileView = {
   path: string;
   topLevelStatementCount: number;
+  countryTags: string[];
   activeWars: WarView[];
   previousWars: WarView[];
+};
+
+export type CountryCatalogView = {
+  countries: Record<string, CountryView>;
+  warnings: string[];
+};
+
+export type CountryView = {
+  tag: string;
+  name: string;
+  flagDataUrl: string | null;
 };
 
 export type WarView = {

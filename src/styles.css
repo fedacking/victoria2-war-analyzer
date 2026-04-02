@@ -109,6 +109,39 @@ h1 {
   align-content: start;
 }
 
+.action-row,
+.button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.path-controls {
+  display: grid;
+  gap: 14px;
+}
+
+.path-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(246, 239, 223, 0.05);
+}
+
+.path-card__header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.path-card__value {
+  color: var(--panel-muted);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
 .primary-button {
   justify-self: start;
   border: 0;
@@ -133,6 +166,45 @@ h1 {
 .primary-button:disabled {
   cursor: wait;
   opacity: 0.72;
+  transform: none;
+}
+
+.secondary-button,
+.ghost-button {
+  border-radius: 999px;
+  padding: 11px 18px;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease,
+    opacity 140ms ease,
+    border-color 140ms ease;
+}
+
+.secondary-button {
+  border: 1px solid rgba(214, 168, 94, 0.28);
+  color: #f5e4c4;
+  background: rgba(214, 168, 94, 0.12);
+}
+
+.ghost-button {
+  border: 1px solid rgba(246, 239, 223, 0.14);
+  color: var(--panel-muted);
+  background: transparent;
+}
+
+.secondary-button:hover,
+.ghost-button:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.secondary-button:disabled,
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
   transform: none;
 }
 
@@ -184,6 +256,34 @@ h1 {
   border: 1px solid rgba(255, 171, 155, 0.26);
   border-radius: 18px;
   background: rgba(150, 47, 34, 0.18);
+}
+
+.warning-banner {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 18px;
+  border: 1px solid rgba(214, 168, 94, 0.24);
+  border-radius: 18px;
+  background: rgba(114, 84, 32, 0.18);
+}
+
+.warning-title {
+  color: var(--accent-strong);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.warning-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--panel-muted);
+  line-height: 1.5;
 }
 
 .workspace {
@@ -387,6 +487,64 @@ h1 {
   line-height: 1.5;
 }
 
+.country-line {
+  display: grid;
+  gap: 6px;
+}
+
+.country-line__label {
+  color: #f1ddbd;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.country-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.country-label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.country-list__item {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(246, 239, 223, 0.05);
+}
+
+.country-flag {
+  width: 20px;
+  height: 14px;
+  border: 1px solid rgba(246, 239, 223, 0.14);
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(246, 239, 223, 0.08);
+  flex: 0 0 auto;
+}
+
+.country-versus {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.country-versus__separator {
+  color: var(--panel-muted);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .list-card__summary--compact {
   gap: 0;
 }
@@ -462,6 +620,15 @@ h1 {
 .side-card__stats dd {
   margin: 0;
   line-height: 1.5;
+}
+
+.side-card__header .country-label {
+  font-size: 1.35rem;
+}
+
+.side-card__header .country-flag {
+  width: 28px;
+  height: 20px;
 }
 
 .unit-breakdown {

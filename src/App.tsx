@@ -4,6 +4,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type {
   BattleSideView,
   BattleWinner,
+  CountryCatalogView,
+  CountryView,
   ParsedSavefileView,
   UnitBreakdownRowView,
   WarSectionKey,
@@ -13,6 +15,11 @@ type WarSelection = {
   section: WarSectionKey;
   warIndex: number;
 };
+
+const DEFAULT_GAME_PATH =
+  "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Victoria 2";
+const GAME_PATH_STORAGE_KEY = "victoria2-war-analyzer:gamePath";
+const MOD_PATH_STORAGE_KEY = "victoria2-war-analyzer:modPath";
 
 const WAR_SECTION_ORDER: WarSectionKey[] = ["activeWars", "previousWars"];
 
@@ -37,32 +44,27 @@ const integerFormatter = new Intl.NumberFormat(undefined, {
 });
 
 function App() {
+  const [gamePath, setGamePath] = useState<string>(
+    () => readStoredPath(GAME_PATH_STORAGE_KEY) || DEFAULT_GAME_PATH,
+  );
+  const [modPath, setModPath] = useState<string>(() =>
+    readStoredPath(MOD_PATH_STORAGE_KEY),
+  );
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [parsedSavefile, setParsedSavefile] =
     useState<ParsedSavefileView | null>(null);
+  const [countryCatalog, setCountryCatalog] =
+    useState<CountryCatalogView | null>(null);
+  const [countryWarnings, setCountryWarnings] = useState<string[]>([]);
   const [isParsing, setIsParsing] = useState<boolean>(false);
+  const [isResolvingCountries, setIsResolvingCountries] =
+    useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [selectedWarSection, setSelectedWarSection] =
     useState<WarSectionKey | null>(null);
   const [selectedWarIndex, setSelectedWarIndex] = useState<number>(0);
   const [selectedBattleIndex, setSelectedBattleIndex] = useState<number>(0);
   const battleListScrollRef = useRef<HTMLDivElement | null>(null);
-
-  function formatError(cause: unknown): string {
-    if (cause instanceof Error) {
-      return cause.message;
-    }
-
-    if (typeof cause === "string") {
-      return cause;
-    }
-
-    try {
-      return JSON.stringify(cause);
-    } catch {
-      return String(cause);
-    }
-  }
 
   function resetSelection() {
     setSelectedWarSection(null);
@@ -136,6 +138,110 @@ function App() {
     }
   }
 
+  async function pickGameFolder() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select the Victoria 2 game folder",
+        defaultPath: gamePath || DEFAULT_GAME_PATH,
+      });
+
+      if (typeof selected === "string") {
+        setGamePath(selected);
+      }
+    } catch (cause) {
+      console.error("Failed to pick base game folder.", {
+        cause,
+        formatted: formatError(cause),
+      });
+      setError(`Failed to open folder picker: ${formatError(cause)}`);
+    }
+  }
+
+  async function pickModFolder() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select a Victoria 2 mod folder",
+        defaultPath: modPath || `${gamePath}\\mod`,
+      });
+
+      if (typeof selected === "string") {
+        setModPath(selected);
+      }
+    } catch (cause) {
+      console.error("Failed to pick mod folder.", {
+        cause,
+        formatted: formatError(cause),
+      });
+      setError(`Failed to open folder picker: ${formatError(cause)}`);
+    }
+  }
+
+  function clearModFolder() {
+    setModPath("");
+  }
+
+  useEffect(() => {
+    writeStoredPath(GAME_PATH_STORAGE_KEY, gamePath);
+  }, [gamePath]);
+
+  useEffect(() => {
+    writeStoredPath(MOD_PATH_STORAGE_KEY, modPath);
+  }, [modPath]);
+
+  useEffect(() => {
+    if (!parsedSavefile) {
+      setCountryCatalog(null);
+      setCountryWarnings([]);
+      setIsResolvingCountries(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsResolvingCountries(true);
+
+    invoke<CountryCatalogView>("resolve_country_catalog", {
+      gamePath,
+      modPath: modPath || null,
+      countryTags: parsedSavefile.countryTags,
+    })
+      .then((nextCatalog) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setCountryCatalog(nextCatalog);
+        setCountryWarnings(nextCatalog.warnings);
+      })
+      .catch((cause) => {
+        if (isCancelled) {
+          return;
+        }
+
+        console.error("Failed to resolve country catalog.", {
+          cause,
+          formatted: formatError(cause),
+        });
+
+        setCountryCatalog(null);
+        setCountryWarnings([
+          `Failed to resolve country data: ${formatError(cause)}`,
+        ]);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsResolvingCountries(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [gamePath, modPath, parsedSavefile]);
+
   const selectedWar =
     parsedSavefile && selectedWarSection
       ? parsedSavefile[selectedWarSection][selectedWarIndex] ?? null
@@ -144,6 +250,13 @@ function App() {
   const totalWarCount = parsedSavefile
     ? parsedSavefile.activeWars.length + parsedSavefile.previousWars.length
     : 0;
+  const countryStatus = parsedSavefile
+    ? isResolvingCountries
+      ? "Refreshing"
+      : countryWarnings.length
+        ? "Loaded with warnings"
+        : "Ready"
+    : "Waiting";
 
   function handleWarSelection(section: WarSectionKey, warIndex: number) {
     setSelectedWarSection(section);
@@ -165,23 +278,74 @@ function App() {
           <h1>War losses command table</h1>
           <p className="lead">
             Open a savefile to scan active and previous wars, drill into their
-            battles, and compare unit compositions side by side.
+            battles, and resolve country names and flags from the selected game
+            data sources.
           </p>
         </div>
 
         <div className="hero-actions">
-          <button
-            className="primary-button"
-            disabled={isParsing}
-            onClick={pickSavefile}
-            type="button"
-          >
-            {isParsing
-              ? "Parsing savefile..."
-              : parsedSavefile
-                ? "Pick another savefile"
-                : "Pick savefile"}
-          </button>
+          <div className="action-row">
+            <button
+              className="primary-button"
+              disabled={isParsing}
+              onClick={pickSavefile}
+              type="button"
+            >
+              {isParsing
+                ? "Parsing savefile..."
+                : parsedSavefile
+                  ? "Pick another savefile"
+                  : "Pick savefile"}
+            </button>
+          </div>
+
+          <div className="path-controls">
+            <section className="path-card">
+              <div className="path-card__header">
+                <div>
+                  <p className="status-label">Base game folder</p>
+                  <p className="path-card__value">{gamePath}</p>
+                </div>
+              </div>
+              <div className="button-row">
+                <button
+                  className="secondary-button"
+                  onClick={pickGameFolder}
+                  type="button"
+                >
+                  Change game folder
+                </button>
+              </div>
+            </section>
+
+            <section className="path-card">
+              <div className="path-card__header">
+                <div>
+                  <p className="status-label">Mod folder</p>
+                  <p className="path-card__value">
+                    {modPath || "Base game only"}
+                  </p>
+                </div>
+              </div>
+              <div className="button-row">
+                <button
+                  className="secondary-button"
+                  onClick={pickModFolder}
+                  type="button"
+                >
+                  Pick mod folder
+                </button>
+                <button
+                  className="ghost-button"
+                  disabled={!modPath}
+                  onClick={clearModFolder}
+                  type="button"
+                >
+                  Base game only
+                </button>
+              </div>
+            </section>
+          </div>
 
           <div className="hero-stats">
             <div className="status-card status-card--wide">
@@ -203,6 +367,11 @@ function App() {
             </div>
 
             <div className="status-card">
+              <p className="status-label">Country data</p>
+              <p className="status-value">{countryStatus}</p>
+            </div>
+
+            <div className="status-card">
               <p className="status-label">Wars loaded</p>
               <p className="status-value">
                 {parsedSavefile ? integerFormatter.format(totalWarCount) : "0"}
@@ -210,10 +379,10 @@ function App() {
             </div>
 
             <div className="status-card">
-              <p className="status-label">Top-level statements</p>
+              <p className="status-label">Countries tracked</p>
               <p className="status-value">
                 {parsedSavefile
-                  ? integerFormatter.format(parsedSavefile.topLevelStatementCount)
+                  ? integerFormatter.format(parsedSavefile.countryTags.length)
                   : "0"}
               </p>
             </div>
@@ -222,6 +391,17 @@ function App() {
       </section>
 
       {error ? <p className="error-text error-banner">{error}</p> : null}
+
+      {countryWarnings.length ? (
+        <section className="warning-banner">
+          <p className="warning-title">Country data warnings</p>
+          <ul className="warning-list">
+            {countryWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {parsedSavefile ? (
         <section className="workspace">
@@ -281,19 +461,37 @@ function App() {
                                       : "Previous"}
                                   </span>
                                 </div>
-                                <p className="list-card__summary">
-                                  <span>
-                                    Attackers: {formatSideList(war.attackers)}
-                                  </span>
-                                  <span>
-                                    Defenders: {formatSideList(war.defenders)}
-                                  </span>
-                                </p>
+
+                                <div className="list-card__summary">
+                                  <div className="country-line">
+                                    <span className="country-line__label">
+                                      Attackers
+                                    </span>
+                                    <CountryInlineList
+                                      catalog={countryCatalog}
+                                      emptyLabel="Unknown"
+                                      tags={war.attackers}
+                                    />
+                                  </div>
+
+                                  <div className="country-line">
+                                    <span className="country-line__label">
+                                      Defenders
+                                    </span>
+                                    <CountryInlineList
+                                      catalog={countryCatalog}
+                                      emptyLabel="Unknown"
+                                      tags={war.defenders}
+                                    />
+                                  </div>
+                                </div>
+
                                 {warDateRange ? (
                                   <p className="list-card__summary list-card__summary--compact">
                                     <span>{warDateRange}</span>
                                   </p>
                                 ) : null}
+
                                 <div className="metric-row">
                                   <span>{formatBattleCount(war.battleCount)}</span>
                                   <span>
@@ -361,13 +559,24 @@ function App() {
                               </span>
                             </div>
                           </div>
-                          <p className="list-card__summary">
+                          <div className="list-card__summary">
                             <span>{battle.locationLabel}</span>
-                            <span>
-                              {battle.attacker.country ?? "Unknown attacker"} vs{" "}
-                              {battle.defender.country ?? "Unknown defender"}
-                            </span>
-                          </p>
+                            <div className="country-versus">
+                              <CountryLabel
+                                catalog={countryCatalog}
+                                emptyLabel="Unknown attacker"
+                                tag={battle.attacker.country}
+                              />
+                              <span className="country-versus__separator">
+                                vs
+                              </span>
+                              <CountryLabel
+                                catalog={countryCatalog}
+                                emptyLabel="Unknown defender"
+                                tag={battle.defender.country}
+                              />
+                            </div>
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -419,8 +628,16 @@ function App() {
                     </section>
 
                     <div className="side-grid">
-                      <SideCard label="Attacker" side={selectedBattle.attacker} />
-                      <SideCard label="Defender" side={selectedBattle.defender} />
+                      <SideCard
+                        catalog={countryCatalog}
+                        label="Attacker"
+                        side={selectedBattle.attacker}
+                      />
+                      <SideCard
+                        catalog={countryCatalog}
+                        label="Defender"
+                        side={selectedBattle.defender}
+                      />
                     </div>
 
                     <section className="unit-breakdown">
@@ -473,9 +690,11 @@ function App() {
 }
 
 function SideCard({
+  catalog,
   label,
   side,
 }: {
+  catalog: CountryCatalogView | null;
   label: string;
   side: BattleSideView;
 }) {
@@ -483,7 +702,13 @@ function SideCard({
     <section className="side-card">
       <div className="side-card__header">
         <p className="section-kicker">{label}</p>
-        <h3>{side.country ?? "Unknown country"}</h3>
+        <h3>
+          <CountryLabel
+            catalog={catalog}
+            emptyLabel="Unknown country"
+            tag={side.country}
+          />
+        </h3>
       </div>
 
       <dl className="side-card__stats">
@@ -497,6 +722,66 @@ function SideCard({
         </div>
       </dl>
     </section>
+  );
+}
+
+function CountryInlineList({
+  catalog,
+  emptyLabel,
+  tags,
+}: {
+  catalog: CountryCatalogView | null;
+  emptyLabel: string;
+  tags: string[];
+}) {
+  if (!tags.length) {
+    return <span>{emptyLabel}</span>;
+  }
+
+  return (
+    <span className="country-list">
+      {tags.map((tag, index) => (
+        <CountryLabel
+          catalog={catalog}
+          className="country-label country-list__item"
+          emptyLabel={emptyLabel}
+          key={`${tag}-${index}`}
+          tag={tag}
+        />
+      ))}
+    </span>
+  );
+}
+
+function CountryLabel({
+  catalog,
+  className = "country-label",
+  emptyLabel,
+  tag,
+}: {
+  catalog: CountryCatalogView | null;
+  className?: string;
+  emptyLabel: string;
+  tag: string | null;
+}) {
+  if (!tag) {
+    return <span className={className}>{emptyLabel}</span>;
+  }
+
+  const country = getCountry(catalog, tag);
+
+  return (
+    <span className={className}>
+      {country.flagDataUrl ? (
+        <img
+          alt=""
+          aria-hidden="true"
+          className="country-flag"
+          src={country.flagDataUrl}
+        />
+      ) : null}
+      <span>{country.name}</span>
+    </span>
   );
 }
 
@@ -570,6 +855,17 @@ function EmptyPanel({ title, copy }: { title: string; copy: string }) {
   );
 }
 
+function getCountry(
+  catalog: CountryCatalogView | null,
+  tag: string,
+): CountryView {
+  return catalog?.countries[tag] ?? {
+    tag,
+    name: tag,
+    flagDataUrl: null,
+  };
+}
+
 function getDefaultSelection(
   savefile: ParsedSavefileView,
 ): WarSelection | null {
@@ -585,6 +881,42 @@ function getDefaultSelection(
   return null;
 }
 
+function readStoredPath(key: string): string {
+  try {
+    return window.localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeStoredPath(key: string, value: string) {
+  try {
+    if (value) {
+      window.localStorage.setItem(key, value);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage failures and keep the app usable.
+  }
+}
+
+function formatError(cause: unknown): string {
+  if (cause instanceof Error) {
+    return cause.message;
+  }
+
+  if (typeof cause === "string") {
+    return cause;
+  }
+
+  try {
+    return JSON.stringify(cause);
+  } catch {
+    return String(cause);
+  }
+}
+
 function formatLosses(value: number): string {
   return integerFormatter.format(value);
 }
@@ -595,10 +927,6 @@ function formatOptionalLosses(value: number | null): string {
 
 function formatBattleCount(value: number): string {
   return `${integerFormatter.format(value)} ${value === 1 ? "battle" : "battles"}`;
-}
-
-function formatSideList(values: string[]): string {
-  return values.length ? values.join(", ") : "Unknown";
 }
 
 function formatWarDateRange(

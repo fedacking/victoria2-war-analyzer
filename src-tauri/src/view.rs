@@ -14,6 +14,7 @@ const MIN_WAR_TOTAL_LOSSES: f64 = 1_000.0;
 pub struct ParsedSavefileView {
     pub path: String,
     pub top_level_statement_count: usize,
+    pub country_tags: Vec<String>,
     pub active_wars: Vec<WarView>,
     pub previous_wars: Vec<WarView>,
 }
@@ -83,12 +84,38 @@ pub fn build_parsed_savefile_view(
     top_level_statement_count: usize,
     wars: &WarCollection,
 ) -> ParsedSavefileView {
+    let active_wars = build_war_views(&wars.active_wars);
+    let previous_wars = build_war_views(&wars.previous_wars);
+
     ParsedSavefileView {
         path,
         top_level_statement_count,
-        active_wars: build_war_views(&wars.active_wars),
-        previous_wars: build_war_views(&wars.previous_wars),
+        country_tags: collect_country_tags(&active_wars, &previous_wars),
+        active_wars,
+        previous_wars,
     }
+}
+
+fn collect_country_tags(active_wars: &[WarView], previous_wars: &[WarView]) -> Vec<String> {
+    active_wars
+        .iter()
+        .chain(previous_wars.iter())
+        .flat_map(|war| {
+            war.attackers
+                .iter()
+                .chain(war.defenders.iter())
+                .chain(war.battles.iter().flat_map(|battle| {
+                    battle
+                        .attacker
+                        .country
+                        .iter()
+                        .chain(battle.defender.country.iter())
+                }))
+        })
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn build_war_views(wars: &[WarData]) -> Vec<WarView> {
