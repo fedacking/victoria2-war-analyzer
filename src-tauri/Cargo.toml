@@ -1,6 +1,6 @@
 [package]
 name = "victoria2-war-analyzer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Victoria 2 savefile analyzer"
 authors = ["Fedacking"]
 edition = "2024"
